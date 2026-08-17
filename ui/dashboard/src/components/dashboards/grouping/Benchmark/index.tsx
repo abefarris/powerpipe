@@ -308,32 +308,32 @@ const Benchmark = (props: InnerCheckProps) => {
         ? (100 * passedRows) / evaluatedRows >= target
         : undefined;
 
-    // The rate is a donut rather than a card, and it carries the target with it
-    // instead of a second card beside it. A rate is a proportion, and a ring
-    // shows a proportion at a glance in a way a number cannot - and once the
-    // ring exists, the target is a notch on it, which says "how far short" in
-    // one look rather than leaving the reader to subtract two percentages.
-    //
-    // Always rendered, the way the five status cards are: nothing was evaluated
-    // is a result, not an absence, and a panel that comes and goes moves every
-    // other one on the row with it. With no rate the ring is empty and reads
-    // "-", which is what a zero-valued status card already does.
+    // The whole score display is opt-in via the tag. Declaring a target is the
+    // benchmark saying "this number is graded" - that earns the 2x2 donut,
+    // where the ring carries the target as a notch and the shortfall is
+    // visible as the gap between arc and notch. Without the tag the summary
+    // row is exactly stock: no rate card of any kind, so benchmarks that never
+    // opted in render as they always have.
     const rateEvaluatedAny = rateEvaluated > 0;
-    const donutProps: PassRateDonutProps & { width: number } = {
-      // Two columns wide, and two rows tall at the render site. The five status
-      // cards fill the remaining 10 of row one; a severity card, when there is
-      // one, lands alongside the donut's lower half on row two.
-      width: 2,
-      label: rateLabel,
-      rate: rateEvaluatedAny
-        ? (100 * ratePassed) / rateEvaluated
-        : undefined,
-      displayType: rateEvaluatedAny
-        ? passRateDisplayType(totalSummary, props.grouping.severity_summary)
-        : "skip",
-      target,
-      targetMet,
-    };
+    const donutProps: (PassRateDonutProps & { width: number }) | undefined =
+      target === undefined
+        ? undefined
+        : {
+            // Two columns wide, and two rows tall at the render site. The five
+            // status cards fill the remaining 10 of row one; a severity card,
+            // when there is one, lands alongside the donut's lower half on row
+            // two.
+            width: 2,
+            label: rateLabel,
+            rate: rateEvaluatedAny
+              ? (100 * ratePassed) / rateEvaluated
+              : undefined,
+            displayType: rateEvaluatedAny
+              ? passRateDisplayType(totalSummary, props.grouping.severity_summary)
+              : "skip",
+            target,
+            targetMet,
+          };
 
     return { summaryCards: summary_cards, donut: donutProps };
   }, [

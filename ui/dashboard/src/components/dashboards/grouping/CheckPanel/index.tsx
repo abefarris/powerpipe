@@ -24,6 +24,7 @@ import {
   CheckResultStatus,
   CheckSeveritySummary,
   CheckSummary,
+  parseTargetPassRate,
   passRateDisplayType,
 } from "../common";
 import { classNames } from "@powerpipe/utils/styles";
@@ -416,8 +417,14 @@ const CheckPanelSeverity = ({ severity_summary }: CheckPanelSeverityProps) => {
 };
 
 const CheckPanel = ({ depth, node }: CheckPanelProps) => {
-  const { firstChildSummaries, dispatch, groupingConfig, nodeStates } =
+  const { definition, firstChildSummaries, dispatch, groupingConfig, nodeStates } =
     useBenchmarkGrouping();
+  // The score display is opt-in per benchmark via the target_pass_rate tag -
+  // see the summary donut in Benchmark/index.tsx, which shares this gate. A
+  // benchmark that has not opted in renders its tree exactly as stock
+  // Powerpipe does, with no rate column.
+  const showPassRate =
+    parseTargetPassRate(definition?.tags?.target_pass_rate) !== undefined;
   const expanded = nodeStates[node.name]
     ? nodeStates[node.name].expanded
     : false;
@@ -539,10 +546,12 @@ const CheckPanel = ({ depth, node }: CheckPanelProps) => {
                     firstChildSummaries={firstChildSummaries}
                   />
                 </div>
-                <CheckPanelPassRate
-                  summary={node.summary}
-                  severity_summary={node.severity_summary}
-                />
+                {showPassRate && (
+                  <CheckPanelPassRate
+                    summary={node.summary}
+                    severity_summary={node.severity_summary}
+                  />
+                )}
               </div>
             </div>
             {can_be_expanded && !expanded && (
