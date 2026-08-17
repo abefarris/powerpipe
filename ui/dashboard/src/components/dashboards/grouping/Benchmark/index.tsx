@@ -17,6 +17,9 @@ import {
   CheckSummary,
 } from "../common";
 import { CardType } from "@powerpipe/components/dashboards/data/CardDataProcessor";
+import PassRateDonut, {
+  PassRateDonutProps,
+} from "@powerpipe/components/dashboards/grouping/Benchmark/PassRateDonut";
 import {
   parseTargetPassRate,
   passRateDisplayType,
@@ -105,9 +108,12 @@ const Benchmark = (props: InnerCheckProps) => {
     setPanelData(benchmarkDataTable);
   }, [benchmarkDataTable, setPanelData]);
 
-  const summaryCards = useMemo(() => {
+  const { summaryCards, donut } = useMemo<{
+    summaryCards: any[];
+    donut: (PassRateDonutProps & { width: number }) | undefined;
+  }>(() => {
     if (!props.grouping) {
-      return [];
+      return { summaryCards: [], donut: undefined };
     }
 
     const totalSummary = props.firstChildSummaries.reduce(
@@ -303,49 +309,37 @@ const Benchmark = (props: InnerCheckProps) => {
         ? (100 * passedRows) / evaluatedRows >= target
         : undefined;
 
-    if (target !== undefined) {
-      summary_cards.push({
-        name: `${props.definition.name}.container.summary.target`,
-        width: 2,
-        display_type:
-          targetMet === undefined ? "skip" : targetMet ? "ok" : "alert",
-        properties: {
-          label: `Target ${target.toFixed(1)}%`,
-          // Spelled out rather than left to colour alone, so the verdict
-          // survives a greyscale print and does not depend on colour vision.
-          value: targetMet === undefined ? "-" : targetMet ? "MET" : "MISSED",
-          icon: "materialsymbols-solid:flag",
-        },
-      });
-    }
-
-    // Rendered unconditionally, the way the five status cards are: nothing was
-    // evaluated is a result, not an absence, and a card that comes and goes
-    // moves every other card on the row with it. When there is no rate to show
-    // it greys out via the "skip" display type and reads "-", which is what a
-    // zero-valued status card already does.
+    // The rate is a donut rather than a card, and it carries the target with it
+    // instead of a second card beside it. A rate is a proportion, and a ring
+    // shows a proportion at a glance in a way a number cannot - and once the
+    // ring exists, the target is a notch on it, which says "how far short" in
+    // one look rather than leaving the reader to subtract two percentages.
+    //
+    // Always rendered, the way the five status cards are: nothing was evaluated
+    // is a result, not an absence, and a panel that comes and goes moves every
+    // other one on the row with it. With no rate the ring is empty and reads
+    // "-", which is what a zero-valued status card already does.
     const rateEvaluatedAny = rateEvaluated > 0;
-    summary_cards.unshift({
-      name: `${props.definition.name}.container.summary.pass_rate`,
+    const donutProps: PassRateDonutProps & { width: number } = {
       width: severityCardShown ? 4 : 2,
-      display_type: rateEvaluatedAny
+      label: rateLabel,
+      rate: rateEvaluatedAny
+        ? (100 * ratePassed) / rateEvaluated
+        : undefined,
+      displayType: rateEvaluatedAny
         ? passRateDisplayType(totalSummary, props.grouping.severity_summary)
         : "skip",
-      properties: {
-        label: rateLabel,
-        value: rateEvaluatedAny
-          ? `${((100 * ratePassed) / rateEvaluated).toFixed(1)}%`
-          : "-",
-        icon: "materialsymbols-solid:percent",
-      },
-    });
+      target,
+      targetMet,
+    };
 
-    return summary_cards;
+    return { summaryCards: summary_cards, donut: donutProps };
   }, [
     props.firstChildSummaries,
     props.grouping,
     props.groupingConfig,
     props.definition.name,
+    props.definition.tags,
   ]);
 
   if (!props.grouping) {
@@ -379,6 +373,27 @@ const Benchmark = (props: InnerCheckProps) => {
         />
       )}
       <Grid name={`${props.definition.name}.container.summary`}>
+        {donut && (
+          <Panel
+            key={`${props.definition.name}.container.summary.pass_rate`}
+            definition={{
+              name: `${props.definition.name}.container.summary.pass_rate`,
+              dashboard: props.definition.dashboard,
+              panel_type: "card",
+              status: "complete",
+              width: donut.width as Width,
+            }}
+            parentType="benchmark"
+          >
+            <PassRateDonut
+              label={donut.label}
+              rate={donut.rate}
+              displayType={donut.displayType}
+              target={donut.target}
+              targetMet={donut.targetMet}
+            />
+          </Panel>
+        )}
         {summaryCards
           .filter(({ name }) => {
             const statusFilter = expressions?.find(
