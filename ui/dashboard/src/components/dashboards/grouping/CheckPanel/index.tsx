@@ -23,6 +23,8 @@ import {
   CheckResult,
   CheckResultStatus,
   CheckSeveritySummary,
+  CheckSummary,
+  passRateDisplayType,
 } from "../common";
 import { classNames } from "@powerpipe/utils/styles";
 import { createPortal } from "react-dom";
@@ -338,6 +340,49 @@ const CheckPanelSeverityBadge = ({
   );
 };
 
+// Pass rate for THIS node, over evaluated results only.
+//
+// Every node in the tree - root benchmark, nested benchmark, control, or a tag
+// group created by Filter & Group - carries its own `summary`, already merged
+// upward by StatusSummary.Merge in the Go executor. So the same three lines give
+// a rollup percentage at every level, with no extra plumbing.
+//
+// Skips are excluded from the denominator ("not applicable" is not "passed");
+// info counts as passed, matching StatusSummary.PassedCount().
+//
+// Weighted by result row, not by distinct resource: a resource inspected by
+// several controls counts once per control. Deduping would need resource
+// identity, which StatusSummary does not carry.
+const CheckPanelPassRate = ({
+  summary,
+  severity_summary,
+}: {
+  summary: CheckSummary;
+  severity_summary: CheckSeveritySummary;
+}) => {
+  const passed = summary.ok + summary.info;
+  const failed = summary.alarm + summary.error;
+  const evaluated = passed + failed;
+  if (evaluated === 0) {
+    return <div className="flex-shrink-0 w-16 text-right" />;
+  }
+  const rate = (100 * passed) / evaluated;
+  return (
+    <div
+      className={`flex-shrink-0 w-16 text-right tabular-nums ${
+        {
+          ok: "text-ok",
+          severity: "text-severity",
+          alert: "text-alert",
+        }[passRateDisplayType(summary, severity_summary)]
+      }`}
+      title={`${passed} of ${evaluated} evaluated results passed`}
+    >
+      {rate.toFixed(1)}%
+    </div>
+  );
+};
+
 const CheckPanelSeverity = ({ severity_summary }: CheckPanelSeverityProps) => {
   const critical = severity_summary["critical"];
   const high = severity_summary["high"];
@@ -475,11 +520,28 @@ const CheckPanel = ({ depth, node }: CheckPanelProps) => {
                 />
                 <CheckPanelSeverity severity_summary={node.severity_summary} />
               </div>
-              <div className="flex-shrink-0 w-40 md:w-72 lg:w-96">
-                <CheckSummaryChart
-                  status={node.status}
+              {/* Rate and chart travel together as one right-hand unit. The
+                  parent row is justify-between, so a standalone rate would be
+                  positioned by space distribution and land at a different x on
+                  every row - a ragged column of numbers.
+
+                  The rate sits AFTER the chart, not before it: the chart's
+                  left-hand count is right-aligned against the bar's left edge,
+                  which moves with the alarm width, so a rate placed before it
+                  collides on rows with alarms no matter how wide the gutter.
+                  The chart's own width is fixed per breakpoint, so anything
+                  after it lands in a true column. */}
+              <div className="flex flex-shrink-0 items-center gap-x-3">
+                <div className="flex-shrink-0 w-40 md:w-72 lg:w-96">
+                  <CheckSummaryChart
+                    status={node.status}
+                    summary={node.summary}
+                    firstChildSummaries={firstChildSummaries}
+                  />
+                </div>
+                <CheckPanelPassRate
                   summary={node.summary}
-                  firstChildSummaries={firstChildSummaries}
+                  severity_summary={node.severity_summary}
                 />
               </div>
             </div>

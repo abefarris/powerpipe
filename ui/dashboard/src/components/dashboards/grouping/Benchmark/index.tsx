@@ -17,6 +17,7 @@ import {
   CheckSummary,
 } from "../common";
 import { CardType } from "@powerpipe/components/dashboards/data/CardDataProcessor";
+import { passRateDisplayType } from "@powerpipe/components/dashboards/grouping/common";
 import { default as BenchmarkType } from "../common/Benchmark";
 import {
   getComponent,
@@ -191,8 +192,120 @@ const Benchmark = (props: InnerCheckProps) => {
         },
       });
     }
+    // PASS RATE, weighted by whatever the top-level grouping is.
+    //
+    // Two different weightings are available, and which one is right depends on
+    // how the tree is currently grouped:
+    //
+    //   by RESULT ROW   - sum the five ints in totalSummary. A resource that
+    //                     five controls inspect counts five times.
+    //   by GROUP        - count first-level CHILDREN. StatusSummary cannot
+    //                     dedupe (five ints, no identity), but the grouping tree
+    //                     already did: group by resource and each child IS one
+    //                     distinct resource, so counting children yields a
+    //                     distinct-resource rate that summing ints cannot.
+    //
+    // The group weighting is used whenever there is a real grouping dimension,
+    // so the headline answers the question the reader just asked by choosing it:
+    // grouped by resource it reads per-resource, by domain it reads per-domain.
+    // Row weighting is the fallback for a flat (result-only) view.
+    //
+    // The dimension is the first grouping entry that is not "benchmark" (the
+    // root IS the benchmark, so its children are the next level down) and not
+    // "result" (leaves, which are the row-weighted case anyway).
+    const passedRows = totalSummary.ok + totalSummary.info;
+    const failedRows = totalSummary.alarm + totalSummary.error;
+    const evaluatedRows = passedRows + failedRows;
+
+    let groupPassed = 0;
+    let groupFailed = 0;
+    for (const childSummary of props.firstChildSummaries) {
+      // A child fails if anything beneath it alarmed or errored, and passes only
+      // if it was actually evaluated. Skip-only children count as neither, for
+      // the same reason skips leave the row-level denominator.
+      if (childSummary.alarm + childSummary.error > 0) {
+        groupFailed += 1;
+      } else if (childSummary.ok + childSummary.info > 0) {
+        groupPassed += 1;
+      }
+    }
+    const groupEvaluated = groupPassed + groupFailed;
+
+    // Take the dimension from the ACTUAL first-level children, not from
+    // groupingConfig. Config alone is ambiguous: with a grouping of
+    // [benchmark, control, result] the children are benchmarks if this benchmark
+    // has sub-benchmarks, and controls if it does not - the root is itself a
+    // benchmark, so that level may or may not consume an entry. Reading the
+    // child node type is true in both cases.
+    //
+    // A control_tag child carries the tag KEY (e.g. "domain") separately from
+    // its value, and the node type alone would only say "control_tag", so the
+    // key is recovered from the matching groupingConfig entry for the label.
+    const firstChild = (props.grouping.children || [])[0];
+    const childType = firstChild ? firstChild.type : undefined;
+
+    let dimensionLabel: string | undefined = undefined;
+    if (childType && childType !== "result") {
+      if (childType === "control_tag" || childType === "dimension") {
+        const configEntry = (props.groupingConfig || []).find(
+          (g) => g.type === childType,
+        );
+        dimensionLabel = (configEntry && configEntry.value) || childType;
+      } else {
+        dimensionLabel = childType;
+      }
+    }
+
+    const useGroupWeighting = !!dimensionLabel && groupEvaluated > 0;
+
+    const rateLabel = useGroupWeighting
+      ? `Pass Rate by ${dimensionLabel}`
+      : "Pass Rate";
+    const ratePassed = useGroupWeighting ? groupPassed : passedRows;
+    const rateEvaluated = useGroupWeighting ? groupEvaluated : evaluatedRows;
+
+    // The rate leads the summary row rather than trailing it. The five status
+    // cards are 10 grid units, so the layout math is:
+    //
+    //   no severity card:  rate(2) + 5 status(10)            = 12, one exact row
+    //   severity card:     rate(4) + 4 status(8)             = 12, then the
+    //                      remaining status card + severity  =  4 on row two
+    //
+    // Appending at width 2 instead (the first attempt) left the rate orphaned
+    // alone on a second row, after a first row the status cards had already
+    // filled - the headline number in the worst seat in the house. Leading and
+    // width-4 also stops "Pass Rate by resource" truncating.
+    const severityCardShown =
+      criticalRaw !== undefined || highRaw !== undefined;
+
+    // Rendered unconditionally, the way the five status cards are: nothing was
+    // evaluated is a result, not an absence, and a card that comes and goes
+    // moves every other card on the row with it. When there is no rate to show
+    // it greys out via the "skip" display type and reads "-", which is what a
+    // zero-valued status card already does.
+    const rateEvaluatedAny = rateEvaluated > 0;
+    summary_cards.unshift({
+      name: `${props.definition.name}.container.summary.pass_rate`,
+      width: severityCardShown ? 4 : 2,
+      display_type: rateEvaluatedAny
+        ? passRateDisplayType(totalSummary, props.grouping.severity_summary)
+        : "skip",
+      properties: {
+        label: rateLabel,
+        value: rateEvaluatedAny
+          ? `${((100 * ratePassed) / rateEvaluated).toFixed(1)}%`
+          : "-",
+        icon: "materialsymbols-solid:percent",
+      },
+    });
+
     return summary_cards;
-  }, [props.firstChildSummaries, props.grouping, props.definition.name]);
+  }, [
+    props.firstChildSummaries,
+    props.grouping,
+    props.groupingConfig,
+    props.definition.name,
+  ]);
 
   if (!props.grouping) {
     return null;

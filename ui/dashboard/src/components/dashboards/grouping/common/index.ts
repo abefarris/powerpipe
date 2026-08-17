@@ -222,6 +222,42 @@ export type DisplayGroupType =
   | CheckDisplayGroupType
   | DetectionDisplayGroupType;
 
+// Colour rule for a pass rate, shared by the benchmark summary card and the
+// per-node rates so the two can never disagree.
+//
+// Three states, none of which need an arbitrary percentage threshold - the
+// severity of what is failing decides, not how much:
+//
+//   ok       nothing failed
+//   alert    a critical or high control is failing, OR something errored
+//            (an error means the check could not run, which is not a graded
+//            finding - it is a broken check, and should read as loudly as a
+//            real failure)
+//   severity things failed, but nothing critical or high did
+//
+// Without the middle state a benchmark at 85.7% with one medium failure looked
+// exactly as alarming as one at 12% with a failing critical.
+//
+// severity_summary counts ALARMING results by severity (see
+// ControlResultNode.severity_summary, which stores 1 only when status is
+// "alarm"), aggregated up the tree by HierarchyNode - so this reads "how many
+// critical/high are currently failing", not "how many exist".
+export const passRateDisplayType = (
+  summary: CheckSummary,
+  severity_summary: CheckSeveritySummary,
+): "ok" | "alert" | "severity" => {
+  const failed = summary.alarm + summary.error;
+  if (failed === 0) {
+    return "ok";
+  }
+  if (summary.error > 0) {
+    return "alert";
+  }
+  const criticalHighFailing =
+    (severity_summary.critical || 0) + (severity_summary.high || 0);
+  return criticalHighFailing > 0 ? "alert" : "severity";
+};
+
 export type CheckDisplayGroup = {
   type: DisplayGroupType;
   value?: string | undefined;
