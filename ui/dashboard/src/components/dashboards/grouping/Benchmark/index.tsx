@@ -17,6 +17,8 @@ import {
   CheckSummary,
 } from "../common";
 import { CardType } from "@powerpipe/components/dashboards/data/CardDataProcessor";
+import { classNames } from "@powerpipe/utils/styles";
+import { getResponsivePanelWidthClass } from "@powerpipe/utils/layout";
 import PassRateDonut, {
   PassRateDonutProps,
 } from "@powerpipe/components/dashboards/grouping/Benchmark/PassRateDonut";
@@ -273,19 +275,16 @@ const Benchmark = (props: InnerCheckProps) => {
     const ratePassed = useGroupWeighting ? groupPassed : passedRows;
     const rateEvaluated = useGroupWeighting ? groupEvaluated : evaluatedRows;
 
-    // The rate leads the summary row rather than trailing it. The five status
-    // cards are 10 grid units, so the layout math is:
+    // The rate leads the summary row rather than trailing it. As a 2x2 square
+    // it takes two of the twelve columns and two rows, so the layout is:
     //
-    //   no severity card:  rate(2) + 5 status(10)            = 12, one exact row
-    //   severity card:     rate(4) + 4 status(8)             = 12, then the
-    //                      remaining status card + severity  =  4 on row two
+    //   row one:  rate(2) + 5 status cards(10)   = 12, exactly full
+    //   row two:  rate continues, and a severity card (when there is one) sits
+    //             beside its lower half
     //
-    // Appending at width 2 instead (the first attempt) left the rate orphaned
-    // alone on a second row, after a first row the status cards had already
-    // filled - the headline number in the worst seat in the house. Leading and
-    // width-4 also stops "Pass Rate by resource" truncating.
-    const severityCardShown =
-      criticalRaw !== undefined || highRaw !== undefined;
+    // Appending it instead - the first attempt - left the rate orphaned on a
+    // second row after the status cards had already filled the first: the
+    // headline number in the worst seat in the house.
 
     // TARGET, when the benchmark declares one: tags = { target_pass_rate = "95" }
     //
@@ -321,7 +320,10 @@ const Benchmark = (props: InnerCheckProps) => {
     // "-", which is what a zero-valued status card already does.
     const rateEvaluatedAny = rateEvaluated > 0;
     const donutProps: PassRateDonutProps & { width: number } = {
-      width: severityCardShown ? 4 : 2,
+      // Two columns wide, and two rows tall at the render site. The five status
+      // cards fill the remaining 10 of row one; a severity card, when there is
+      // one, lands alongside the donut's lower half on row two.
+      width: 2,
       label: rateLabel,
       rate: rateEvaluatedAny
         ? (100 * ratePassed) / rateEvaluated
@@ -374,16 +376,17 @@ const Benchmark = (props: InnerCheckProps) => {
       )}
       <Grid name={`${props.definition.name}.container.summary`}>
         {donut && (
-          <Panel
-            key={`${props.definition.name}.container.summary.pass_rate`}
-            definition={{
-              name: `${props.definition.name}.container.summary.pass_rate`,
-              dashboard: props.definition.dashboard,
-              panel_type: "card",
-              status: "complete",
-              width: donut.width as Width,
-            }}
-            parentType="benchmark"
+          // Its own grid item rather than a Panel: Panel hardcodes the grid
+          // classes on its outer element, so a row span cannot be passed
+          // through it. Two columns by two rows makes the panel square, which
+          // is the shape a ring wants - laid out as a wide card the ring sits
+          // in a corner with dead space beside it.
+          <div
+            id={`${props.definition.name}.container.summary.pass_rate`}
+            className={classNames(
+              "relative col-span-12 row-span-2",
+              getResponsivePanelWidthClass(donut.width),
+            )}
           >
             <PassRateDonut
               label={donut.label}
@@ -392,7 +395,7 @@ const Benchmark = (props: InnerCheckProps) => {
               target={donut.target}
               targetMet={donut.targetMet}
             />
-          </Panel>
+          </div>
         )}
         {summaryCards
           .filter(({ name }) => {
