@@ -15,6 +15,44 @@ load "$LIB_BATS_SUPPORT/load.bash"
   cd -
 }
 
+@test "verify powerpipe benchmark exitCode - target_pass_rate met, alarms present" {
+  cd $FUNCTIONALITY_TEST_MOD
+  run powerpipe benchmark run target_met_with_alarms
+  assert_equal $status 0
+  cd -
+}
+
+@test "verify powerpipe benchmark exitCode - target_pass_rate missed" {
+  cd $FUNCTIONALITY_TEST_MOD
+  run powerpipe benchmark run target_missed
+  assert_equal $status 1
+  cd -
+}
+
+@test "verify powerpipe benchmark exitCode - control errors outrank a met target" {
+  cd $FUNCTIONALITY_TEST_MOD
+  run powerpipe benchmark run target_with_error
+  assert_equal $status 2
+  cd -
+}
+
+@test "verify benchmark summary - PASS RATE and TARGET rows shown when tagged" {
+  cd $FUNCTIONALITY_TEST_MOD
+  run powerpipe benchmark run target_missed --progress=false
+  assert_output --partial "PASS RATE"
+  assert_output --partial "TARGET"
+  assert_output --partial "MISSED"
+  cd -
+}
+
+@test "verify benchmark summary - no score rows without the target tag" {
+  cd $FUNCTIONALITY_TEST_MOD
+  run powerpipe benchmark run all_controls_ok --progress=false
+  refute_output --partial "PASS RATE"
+  refute_output --partial "TARGET"
+  cd -
+}
+
 # @test "verify powerpipe benchmark exitCode - runtime error(insufficient args)" {
 #   cd $FUNCTIONALITY_TEST_MOD
 #   run powerpipe benchmark
