@@ -420,6 +420,10 @@ export type PanelDefinition = {
   source_definition?: string;
   sql?: string;
   status?: DashboardRunState;
+  // the resource's HCL tags. Already present on the wire for benchmark and
+  // control panels - see DashboardTreeRunImpl.Tags - but previously undeclared
+  // here, so nothing could read them.
+  tags?: { [key: string]: string };
   title?: string;
   width?: Width;
 };

@@ -17,7 +17,10 @@ import {
   CheckSummary,
 } from "../common";
 import { CardType } from "@powerpipe/components/dashboards/data/CardDataProcessor";
-import { passRateDisplayType } from "@powerpipe/components/dashboards/grouping/common";
+import {
+  parseTargetPassRate,
+  passRateDisplayType,
+} from "@powerpipe/components/dashboards/grouping/common";
 import { default as BenchmarkType } from "../common/Benchmark";
 import {
   getComponent,
@@ -278,6 +281,44 @@ const Benchmark = (props: InnerCheckProps) => {
     const severityCardShown =
       criticalRaw !== undefined || highRaw !== undefined;
 
+    // TARGET, when the benchmark declares one: tags = { target_pass_rate = "95" }
+    //
+    // The verdict is judged against the ROW-weighted rate, never the group
+    // weighting the rate card may be showing. Row weighting is what the Go side
+    // computes for the CLI summary and the exit code, and it does not move when
+    // the tree is regrouped - so the page cannot claim a target was met while
+    // `powerpipe benchmark run` exits non-zero, and the verdict does not change
+    // because somebody reordered the Filter & Group panel.
+    // See controlexecute.populateScores for the other half of this contract.
+    // Withheld until execution completes. Results stream in, so a partial run
+    // reads as a rate over only the controls that have reported: the first
+    // control to pass puts the benchmark at 100% and the card flashes MET
+    // before settling to MISSED. A verdict that is wrong for the first few
+    // seconds is worse than one that is briefly absent.
+    const target = parseTargetPassRate(props.definition.tags?.target_pass_rate);
+    const targetMet =
+      target !== undefined &&
+      evaluatedRows > 0 &&
+      props.grouping.status === "complete"
+        ? (100 * passedRows) / evaluatedRows >= target
+        : undefined;
+
+    if (target !== undefined) {
+      summary_cards.push({
+        name: `${props.definition.name}.container.summary.target`,
+        width: 2,
+        display_type:
+          targetMet === undefined ? "skip" : targetMet ? "ok" : "alert",
+        properties: {
+          label: `Target ${target.toFixed(1)}%`,
+          // Spelled out rather than left to colour alone, so the verdict
+          // survives a greyscale print and does not depend on colour vision.
+          value: targetMet === undefined ? "-" : targetMet ? "MET" : "MISSED",
+          icon: "materialsymbols-solid:flag",
+        },
+      });
+    }
+
     // Rendered unconditionally, the way the five status cards are: nothing was
     // evaluated is a result, not an absence, and a card that comes and goes
     // moves every other card on the row with it. When there is no rate to show
@@ -344,26 +385,30 @@ const Benchmark = (props: InnerCheckProps) => {
               (expr) => expr.type === "status",
             );
             const statusType = name.split(".")[name.split(".").length - 1];
-            if (
-              statusType !== "severity" &&
-              statusFilter &&
-              statusFilter.operator === "equal"
-            ) {
+            // Cards whose trailing name segment is not a status are not status
+            // buckets and must survive a status filter. Comparing them against
+            // the filter value would always fail and silently drop them: the
+            // rate and the target describe the filtered view, they are not one
+            // of the things being filtered.
+            const isStatusCard = !["severity", "pass_rate", "target"].includes(
+              statusType,
+            );
+            if (isStatusCard && statusFilter && statusFilter.operator === "equal") {
               return statusType === statusFilter.value;
             } else if (
-              statusType !== "severity" &&
+              isStatusCard &&
               statusFilter &&
               statusFilter.operator === "not_equal"
             ) {
               return statusType !== statusFilter.value;
             } else if (
-              statusType !== "severity" &&
+              isStatusCard &&
               statusFilter &&
               statusFilter.operator === "in"
             ) {
               return statusFilter.value?.includes(statusType);
             } else if (
-              statusType !== "severity" &&
+              isStatusCard &&
               statusFilter &&
               statusFilter.operator === "not_in"
             ) {

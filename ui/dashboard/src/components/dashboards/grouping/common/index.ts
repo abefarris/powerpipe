@@ -242,6 +242,33 @@ export type DisplayGroupType =
 // ControlResultNode.severity_summary, which stores 1 only when status is
 // "alarm"), aggregated up the tree by HierarchyNode - so this reads "how many
 // critical/high are currently failing", not "how many exist".
+// TARGET_PASS_RATE_TAG_KEY is the benchmark tag declaring the pass rate the
+// benchmark is expected to hold, as a percentage.
+//
+// This mirrors controlexecute.TargetPassRateTagKey and parseTargetPassRate on
+// the Go side. The two must agree: Go decides the CLI verdict and the process
+// exit code, this decides what the page says, and a disagreement would show up
+// as a green card sitting over a failing build. Both accept "95" and "95%", and
+// both reject anything outside 0-100 rather than guessing at it.
+export const TARGET_PASS_RATE_TAG_KEY = "target_pass_rate";
+
+export const parseTargetPassRate = (
+  raw: string | undefined,
+): number | undefined => {
+  if (!raw) {
+    return undefined;
+  }
+  const trimmed = raw.trim().replace(/%$/, "").trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  const target = Number(trimmed);
+  if (!Number.isFinite(target) || target < 0 || target > 100) {
+    return undefined;
+  }
+  return target;
+};
+
 export const passRateDisplayType = (
   summary: CheckSummary,
   severity_summary: CheckSeveritySummary,
