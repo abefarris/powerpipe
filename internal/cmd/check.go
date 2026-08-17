@@ -191,9 +191,10 @@ func runCheckCmd[T controlinit.CheckTarget](cmd *cobra.Command, args []string) {
 
 	// pull out useful properties
 	totalAlarms, totalErrors := 0, 0
+	targetDeclared, targetMissed := false, false
 	defer func() {
 		// set the defined exit code after successful execution
-		exitCode = getExitCode(totalAlarms, totalErrors)
+		exitCode = getExitCode(totalAlarms, totalErrors, targetDeclared, targetMissed)
 	}()
 
 	for _, namedTree := range trees {
@@ -212,6 +213,15 @@ func runCheckCmd[T controlinit.CheckTarget](cmd *cobra.Command, args []string) {
 		if namedTree.tree.Root != nil && namedTree.tree.Root.Summary != nil {
 			totalAlarms = namedTree.tree.Root.Summary.Status.Alarm
 			totalErrors = namedTree.tree.Root.Summary.Status.Error
+
+			// a benchmark that declares a target is graded against it - see
+			// getExitCode. One missed target across several targets fails.
+			if met := namedTree.tree.Root.Summary.TargetMet; met != nil {
+				targetDeclared = true
+				if !*met {
+					targetMissed = true
+				}
+			}
 		}
 
 		err = publishSnapshot(ctx, namedTree.tree, viper.GetBool(constants.ArgShare), viper.GetBool(constants.ArgSnapshot))
@@ -329,11 +339,30 @@ func getExecutionTrees(ctx context.Context, initData *controlinit.InitData) ([]*
 }
 
 // get the exit code for successful check run
-func getExitCode(alarms int, errors int) int {
+func getExitCode(alarms int, errors int, targetDeclared bool, targetMissed bool) int {
 	// 1 or more control errors, return exitCode=2
+	//
+	// Checked before any target, and deliberately not overridden by one: an
+	// errored control is a check that could not answer, so a met target says
+	// nothing about the part of the benchmark that failed to run.
 	if errors > 0 {
 		return constants.ExitCodeControlsError
 	}
+
+	// A declared target replaces "any alarm fails" with "the rate must hold".
+	// That is the point of declaring one - a benchmark sitting at 98% against a
+	// target of 95% is passing by its own definition, and failing the build for
+	// the two controls that alarmed would make the target meaningless.
+	//
+	// This only applies to benchmarks that opt in by setting the tag; without it
+	// the original behaviour is unchanged.
+	if targetDeclared {
+		if targetMissed {
+			return constants.ExitCodeControlsAlarm
+		}
+		return constants.ExitCodeSuccessful
+	}
+
 	// 1 or more controls in alarm, return exitCode=1
 	if alarms > 0 {
 		return constants.ExitCodeControlsAlarm

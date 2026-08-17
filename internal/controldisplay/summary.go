@@ -73,5 +73,8 @@ func (r SummaryRenderer) Render() string {
 		summaryRow,
 	)
 
+	// and the pass rate / target verdict, when there is one to show
+	summaryLines = append(summaryLines, NewSummaryScoreRowRenderer(r.resultTree, availableWidth).Render()...)
+
 	return strings.Join(summaryLines, "\n")
 }

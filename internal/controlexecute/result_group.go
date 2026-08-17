@@ -337,6 +337,21 @@ func (r *ResultGroup) populateScores() {
 	}
 
 	target, hasTarget := parseTargetPassRate(r.Tags[TargetPassRateTagKey])
+
+	// The execution root is a synthetic group that wraps whatever was invoked;
+	// it carries no tags of its own, so when it wraps a single benchmark it
+	// adopts that benchmark's target. Without this the root - which is what the
+	// CLI summary and the exit code read - would never see a target, even though
+	// the benchmark directly beneath it declares one.
+	//
+	// Only for a single child: with several, there is no one target that the
+	// aggregate rate could fairly be judged against.
+	if !hasTarget && r.GroupId == RootResultGroupName && len(r.Groups) == 1 {
+		if childTarget := r.Groups[0].Summary.TargetPassRate; childTarget != nil {
+			target, hasTarget = *childTarget, true
+		}
+	}
+
 	if !hasTarget {
 		return
 	}
