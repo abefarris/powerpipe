@@ -222,7 +222,7 @@ export type DisplayGroupType =
   | CheckDisplayGroupType
   | DetectionDisplayGroupType;
 
-// Colour rule for a pass rate, shared by the benchmark summary card and the
+// Colour rule for a pass rate, shared by the benchmark summary donut and the
 // per-node rates so the two can never disagree.
 //
 // Three states, none of which need an arbitrary percentage threshold - the

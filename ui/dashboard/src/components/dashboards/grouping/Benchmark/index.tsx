@@ -210,16 +210,19 @@ const Benchmark = (props: InnerCheckProps) => {
     //
     //   by RESULT ROW   - sum the five ints in totalSummary. A resource that
     //                     five controls inspect counts five times.
-    //   by GROUP        - count first-level CHILDREN. StatusSummary cannot
-    //                     dedupe (five ints, no identity), but the grouping tree
-    //                     already did: group by resource and each child IS one
-    //                     distinct resource, so counting children yields a
-    //                     distinct-resource rate that summing ints cannot.
+    //   by GROUP        - mean of the first-level children's own pass rates,
+    //                     every group weighted equally regardless of row count.
+    //                     StatusSummary cannot dedupe (five ints, no identity),
+    //                     but the grouping tree already did: group by resource
+    //                     and each child IS one distinct resource, so averaging
+    //                     over children yields a per-resource rate that summing
+    //                     ints cannot.
     //
     // The group weighting is used whenever there is a real grouping dimension,
     // so the headline answers the question the reader just asked by choosing it:
     // grouped by resource it reads per-resource, by domain it reads per-domain.
-    // Row weighting is the fallback for a flat (result-only) view.
+    // Row weighting is the fallback for a flat (result-only) view, and for a
+    // single first-level group, where a group-grain statistic degenerates.
     //
     // The dimension is the first grouping entry that is not "benchmark" (the
     // root IS the benchmark, so its children are the next level down) and not
@@ -228,19 +231,32 @@ const Benchmark = (props: InnerCheckProps) => {
     const failedRows = totalSummary.alarm + totalSummary.error;
     const evaluatedRows = passedRows + failedRows;
 
-    let groupPassed = 0;
-    let groupFailed = 0;
+    // Each group contributes its OWN pass rate, and the headline is the mean of
+    // those - an average of averages, every group weighted equally regardless
+    // of how many rows it holds.
+    //
+    // The earlier scheme counted each group as binary pass/fail, which agrees
+    // with this one whenever groups are internally pure but throws information
+    // away when they are mixed: grouped by severity, a medium tier at 2 ok /
+    // 1 alarm scored the same zero as one failing everything, and the headline
+    // read 75% where the tiers actually average 91.7%. Pure groups still
+    // contribute exactly 100 or 0, so the binary answer falls out as the
+    // special case.
+    //
+    // Skip-only groups contribute nothing to either side, for the same reason
+    // skips leave the row-level denominator.
+    let groupRateSum = 0;
+    let groupEvaluated = 0;
     for (const childSummary of props.firstChildSummaries) {
-      // A child fails if anything beneath it alarmed or errored, and passes only
-      // if it was actually evaluated. Skip-only children count as neither, for
-      // the same reason skips leave the row-level denominator.
-      if (childSummary.alarm + childSummary.error > 0) {
-        groupFailed += 1;
-      } else if (childSummary.ok + childSummary.info > 0) {
-        groupPassed += 1;
+      const childPassed = childSummary.ok + childSummary.info;
+      const childEvaluated =
+        childPassed + childSummary.alarm + childSummary.error;
+      if (childEvaluated === 0) {
+        continue;
       }
+      groupRateSum += childPassed / childEvaluated;
+      groupEvaluated += 1;
     }
-    const groupEvaluated = groupPassed + groupFailed;
 
     // Take the dimension from the ACTUAL first-level children, not from
     // groupingConfig. Config alone is ambiguous: with a grouping of
@@ -280,7 +296,10 @@ const Benchmark = (props: InnerCheckProps) => {
     const rateLabel = useGroupWeighting
       ? `Pass Rate by ${dimensionLabel}`
       : "Pass Rate";
-    const ratePassed = useGroupWeighting ? groupPassed : passedRows;
+    // Numerator and denominator for the headline. Group-weighted, the
+    // numerator is a SUM OF RATES (0..1 each), so passed/evaluated is the mean
+    // group rate; row-weighted it is a plain count of passing rows.
+    const ratePassed = useGroupWeighting ? groupRateSum : passedRows;
     const rateEvaluated = useGroupWeighting ? groupEvaluated : evaluatedRows;
 
     // The rate leads the summary row rather than trailing it. As a 2x2 square
