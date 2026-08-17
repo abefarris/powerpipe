@@ -267,7 +267,15 @@ const Benchmark = (props: InnerCheckProps) => {
       }
     }
 
-    const useGroupWeighting = !!dimensionLabel && groupEvaluated > 0;
+    // Group weighting needs at least two groups to say anything: with one, the
+    // rate collapses to 0% or 100% by definition - a wrapper benchmark holding
+    // a single nested benchmark would read 0.0% while the CLI says 58.9% of
+    // rows pass. One group falls back to row weighting, which is also what the
+    // Go side grades the target against.
+    const useGroupWeighting =
+      !!dimensionLabel &&
+      groupEvaluated > 0 &&
+      props.firstChildSummaries.length > 1;
 
     const rateLabel = useGroupWeighting
       ? `Pass Rate by ${dimensionLabel}`
