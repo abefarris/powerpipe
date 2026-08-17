@@ -5,7 +5,7 @@ import { getWrapperClasses } from "@powerpipe/utils/card";
 // the arc, which keeps it to two SVG elements and needs no charting library -
 // echarts is already a heavy part of this bundle and a two-slice ring does not
 // justify mounting one per benchmark panel.
-const SIZE = 104;
+const SIZE = 116;
 const STROKE = 10;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
@@ -36,6 +36,12 @@ const arcColorClass = (displayType: string) => {
   }
 };
 
+// The card follows the anatomy of its status-card siblings - label top-left at
+// the same size and weight, content beneath, everything hung off the left edge -
+// so the summary row reads as one family. The first version centred everything
+// with the label under the chart, which made this the only card on the row with
+// its own private layout; a card that breaks its siblings' grammar reads as
+// "off" before the eye can say why.
 const PassRateDonut = ({
   label,
   rate,
@@ -44,6 +50,10 @@ const PassRateDonut = ({
   targetMet,
 }: PassRateDonutProps) => {
   const arc = rate === undefined ? 0 : (CIRCUMFERENCE * rate) / 100;
+
+  // The target notch is placed by rotating a radial tick to the target's angle.
+  // -90 puts 0% at twelve o'clock, matching where the arc starts.
+  const targetAngle = target === undefined ? 0 : (360 * target) / 100 - 90;
 
   // Says how far short, rather than restating the two numbers the reader can
   // already see. Percentage points, not percent: 85.7 against 95 is 9.3 points
@@ -59,110 +69,105 @@ const PassRateDonut = ({
             ? `Target ${target.toFixed(1)}% met, ${(rate - target).toFixed(1)} points clear`
             : `Target ${target.toFixed(1)}% missed by ${(target - rate).toFixed(1)} points`;
 
-  // The target notch is placed by rotating a radial tick to the target's angle.
-  // -90 puts 0% at twelve o'clock, matching where the arc starts.
-  const targetAngle = target === undefined ? 0 : (360 * target) / 100 - 90;
-
   return (
     <div
       className={classNames(
-        "h-full flex flex-col items-center justify-center overflow-hidden bg-dashboard-panel text-foreground print:bg-white print:text-black shadow-sm p-3",
+        "h-full flex flex-col overflow-hidden bg-dashboard-panel text-foreground print:bg-white print:text-black shadow-sm p-3 pl-4 pr-5",
         getWrapperClasses(displayType),
       )}
     >
-      <svg
-        className="shrink-0 grow-0"
-        width={SIZE}
-        height={SIZE}
-        viewBox={`0 0 ${SIZE} ${SIZE}`}
-        role="img"
-        aria-label={
-          rate === undefined
-            ? `${label}: not applicable`
-            : `${label}: ${rate.toFixed(1)}%${
-                target !== undefined
-                  ? `, target ${target.toFixed(1)}% ${
-                      targetMet === undefined
-                        ? "pending"
-                        : targetMet
-                          ? "met"
-                          : "missed"
-                    }`
-                  : ""
-              }`
-        }
-      >
-        <circle
-          className="text-black-scale-3"
-          cx={CENTER}
-          cy={CENTER}
-          r={RADIUS}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={STROKE}
-        />
-        {rate !== undefined && (
+      <p className="text-lg truncate" title={label}>
+        {label}
+      </p>
+      <div className="grow flex items-center justify-center min-h-0 py-1">
+        <svg
+          className="shrink-0"
+          width={SIZE}
+          height={SIZE}
+          viewBox={`0 0 ${SIZE} ${SIZE}`}
+          role="img"
+          aria-label={
+            rate === undefined
+              ? `${label}: not applicable`
+              : `${label}: ${rate.toFixed(1)}%${
+                  target !== undefined
+                    ? `, target ${target.toFixed(1)}% ${
+                        targetMet === undefined
+                          ? "pending"
+                          : targetMet
+                            ? "met"
+                            : "missed"
+                      }`
+                    : ""
+                }`
+          }
+        >
           <circle
-            className={arcColorClass(displayType)}
+            className="text-black-scale-3"
             cx={CENTER}
             cy={CENTER}
             r={RADIUS}
             fill="none"
             stroke="currentColor"
             strokeWidth={STROKE}
-            strokeDasharray={`${arc} ${CIRCUMFERENCE - arc}`}
-            strokeLinecap="butt"
-            transform={`rotate(-90 ${CENTER} ${CENTER})`}
-          >
-            <title>{`${label}: ${rate.toFixed(1)}%`}</title>
-          </circle>
-        )}
-        {target !== undefined && (
-          <g transform={`rotate(${targetAngle} ${CENTER} ${CENTER})`}>
-            {/* A 2px tick is close to unhoverable, so a transparent stroke
-                sits over it purely to widen the hit area for the tooltip. */}
-            <line
-              x1={CENTER + RADIUS - STROKE}
-              y1={CENTER}
-              x2={CENTER + RADIUS + STROKE}
-              y2={CENTER}
-              stroke="transparent"
-              strokeWidth={14}
-            >
-              <title>{targetTooltip}</title>
-            </line>
-            <line
-              className="text-foreground"
-              x1={CENTER + RADIUS - STROKE / 2 - 2}
-              y1={CENTER}
-              x2={CENTER + RADIUS + STROKE / 2 + 2}
-              y2={CENTER}
+          />
+          {rate !== undefined && (
+            <circle
+              className={arcColorClass(displayType)}
+              cx={CENTER}
+              cy={CENTER}
+              r={RADIUS}
+              fill="none"
               stroke="currentColor"
-              strokeWidth={2}
-              pointerEvents="none"
-            />
-          </g>
-        )}
-        {/* The rate sits inside the ring rather than beside it - the point of a
-            square panel is that the number and the proportion occupy the same
-            place, so the eye does not travel between them. */}
-        <text
-          className="fill-current font-semibold"
-          x={CENTER}
-          y={CENTER}
-          textAnchor="middle"
-          dominantBaseline="central"
-          fontSize={rate === undefined ? 22 : 20}
-        >
-          {rate === undefined ? "-" : `${rate.toFixed(1)}%`}
-        </text>
-      </svg>
-      <p
-        className="mt-2 text-sm text-center w-full truncate text-foreground-light"
-        title={label}
-      >
-        {label}
-      </p>
+              strokeWidth={STROKE}
+              strokeDasharray={`${arc} ${CIRCUMFERENCE - arc}`}
+              strokeLinecap="butt"
+              transform={`rotate(-90 ${CENTER} ${CENTER})`}
+            >
+              <title>{`${label}: ${rate.toFixed(1)}%`}</title>
+            </circle>
+          )}
+          {target !== undefined && (
+            <g transform={`rotate(${targetAngle} ${CENTER} ${CENTER})`}>
+              {/* A 2px tick is close to unhoverable, so a transparent stroke
+                  sits over it purely to widen the hit area for the tooltip. */}
+              <line
+                x1={CENTER + RADIUS - STROKE}
+                y1={CENTER}
+                x2={CENTER + RADIUS + STROKE}
+                y2={CENTER}
+                stroke="transparent"
+                strokeWidth={14}
+              >
+                <title>{targetTooltip}</title>
+              </line>
+              <line
+                className="text-foreground"
+                x1={CENTER + RADIUS - STROKE / 2 - 2}
+                y1={CENTER}
+                x2={CENTER + RADIUS + STROKE / 2 + 2}
+                y2={CENTER}
+                stroke="currentColor"
+                strokeWidth={2}
+                pointerEvents="none"
+              />
+            </g>
+          )}
+          {/* The value sits inside the ring - the point of the square card is
+              that the number and the proportion occupy one place. font-semibold
+              matches the headline weight of the sibling cards. */}
+          <text
+            className="fill-current font-semibold"
+            x={CENTER}
+            y={CENTER}
+            textAnchor="middle"
+            dominantBaseline="central"
+            fontSize={rate === undefined ? 24 : 22}
+          >
+            {rate === undefined ? "-" : `${rate.toFixed(1)}%`}
+          </text>
+        </svg>
+      </div>
       {target !== undefined && (
         // Deliberately quiet. The ring already carries the state in colour and
         // the notch shows the shortfall, so a second alarm-coloured shout is
@@ -170,7 +175,7 @@ const PassRateDonut = ({
         // status indicator. The verdict stays spelled out so it does not
         // depend on colour, but in sentence case at caption weight.
         <p
-          className="text-xs text-center w-full truncate text-foreground-lighter"
+          className="text-xs truncate text-foreground-lighter"
           title={targetTooltip}
         >
           {targetMet === undefined
