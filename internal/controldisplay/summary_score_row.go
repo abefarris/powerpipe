@@ -25,16 +25,19 @@ func NewSummaryScoreRowRenderer(resultTree *controlexecute.ExecutionTree, width 
 	}
 }
 
-// Render returns one row for the rate and, when a target is declared, a second
-// for the verdict. Two rows rather than one because the combined line overflows
-// the width the rest of the summary block is aligned to, which collapses the
-// dot leader and leaves the numbers jammed against the label.
+// Render returns one row for the rate and a second for the verdict. Two rows
+// rather than one because the combined line overflows the width the rest of the
+// summary block is aligned to, which collapses the dot leader and leaves the
+// numbers jammed against the label.
 //
-// No rows at all when there is no rate to show: a benchmark whose controls all
-// skipped has no pass rate, and printing 0% for it would read as total failure.
+// The whole block is opt-in via the target_pass_rate tag, matching the
+// dashboard: a benchmark that has not declared a target gets its stock summary,
+// so the CLI and the page always agree about whether a score exists. No rate
+// row is printed without one to show - a benchmark whose controls all skipped
+// has no pass rate, and printing 0% would read as total failure.
 func (r *SummaryScoreRowRenderer) Render() []string {
 	summary := r.resultTree.Root.Summary
-	if summary.PassRate == nil {
+	if summary.TargetPassRate == nil || summary.PassRate == nil {
 		return nil
 	}
 
