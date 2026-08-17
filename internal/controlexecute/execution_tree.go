@@ -154,6 +154,9 @@ func (e *ExecutionTree) Execute(ctx context.Context) error {
 		slog.Warn("timed out waiting for active runs to complete")
 	}
 
+	// derive pass rates and target verdicts now that the totals are final
+	e.Root.populateScores()
+
 	// now build map of dimension property name to property value to color map
 	e.DimensionColorGenerator, _ = NewDimensionColorGenerator(4, 27)
 	e.DimensionColorGenerator.populate(e)

@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"sort"
+	"strconv"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -59,9 +61,29 @@ type ResultGroup struct {
 	updateLock *sync.Mutex
 }
 
+// TargetPassRateTagKey is the benchmark tag that declares the pass rate this
+// benchmark is expected to meet, as a percentage: tags = { target_pass_rate = "95" }.
+//
+// A tag rather than a new HCL attribute, for two reasons: benchmarks already
+// carry an arbitrary tag map that is parsed and serialized, so this needs no
+// change to the block schema; and a mod using it still loads on a Powerpipe
+// that predates this feature, which silently ignores the unknown tag.
+const TargetPassRateTagKey = "target_pass_rate"
+
 type GroupSummary struct {
 	Status   controlstatus.StatusSummary            `json:"status"`
 	Severity map[string]controlstatus.StatusSummary `json:"-"`
+
+	// Derived once execution completes, not accumulated during it - see
+	// ResultGroup.populateScores.
+	//
+	// All three are pointers so that "not applicable" and "zero" stay
+	// distinguishable in the payload: a benchmark whose controls all skipped has
+	// no pass rate, which is not the same as a pass rate of 0%. Consumers get an
+	// absent field rather than a misleading number.
+	PassRate       *float64 `json:"pass_rate,omitempty"`
+	TargetPassRate *float64 `json:"target_pass_rate,omitempty"`
+	TargetMet      *bool    `json:"target_met,omitempty"`
 }
 
 func NewGroupSummary() *GroupSummary {
@@ -286,6 +308,65 @@ func (r *ResultGroup) updateSummary(summary *controlstatus.StatusSummary) {
 	if r.Parent != nil {
 		r.Parent.updateSummary(summary)
 	}
+}
+
+// populateScores fills in the derived score fields on this group's summary and
+// on every group beneath it. It must be called once execution is complete.
+//
+// This is a post-pass rather than part of updateSummary because a rate is not
+// additive - it has to be recomputed from the running totals every time they
+// change, and updateSummary is called once per control result from many
+// goroutines. Deriving once, at the end, also means the value can never be
+// observed mid-execution in a partially-aggregated state.
+func (r *ResultGroup) populateScores() {
+	for _, child := range r.Groups {
+		child.populateScores()
+	}
+
+	status := r.Summary.Status
+
+	// Skips are excluded from the denominator. A skipped control was never
+	// judged - usually because it did not apply to this account - so counting it
+	// as a failure would penalise a benchmark for checks it correctly declined
+	// to run. Errors ARE counted as failures: an errored control is a check that
+	// could not answer, which is not the same as one that passed.
+	evaluated := status.Ok + status.Info + status.Alarm + status.Error
+	if evaluated > 0 {
+		rate := 100 * float64(status.Ok+status.Info) / float64(evaluated)
+		r.Summary.PassRate = &rate
+	}
+
+	target, hasTarget := parseTargetPassRate(r.Tags[TargetPassRateTagKey])
+	if !hasTarget {
+		return
+	}
+	r.Summary.TargetPassRate = &target
+
+	// A target on a benchmark that evaluated nothing is neither met nor missed,
+	// so TargetMet stays absent rather than reporting a false failure.
+	if r.Summary.PassRate == nil {
+		return
+	}
+	met := *r.Summary.PassRate >= target
+	r.Summary.TargetMet = &met
+}
+
+// parseTargetPassRate reads a target_pass_rate tag value as a percentage.
+// "95" and "95%" are both accepted, since the tag is hand-written.
+func parseTargetPassRate(raw string) (float64, bool) {
+	trimmed := strings.TrimSpace(strings.TrimSuffix(strings.TrimSpace(raw), "%"))
+	if trimmed == "" {
+		return 0, false
+	}
+	target, err := strconv.ParseFloat(trimmed, 64)
+	if err != nil || target < 0 || target > 100 {
+		// Warn rather than fail the run: a malformed target is a mod authoring
+		// mistake, and refusing to report results because of it would be a worse
+		// outcome than reporting them without a verdict.
+		slog.Warn("ignoring invalid target_pass_rate tag - expected a percentage between 0 and 100", "value", raw)
+		return 0, false
+	}
+	return target, true
 }
 
 func (r *ResultGroup) updateSeverityCounts(severity string, summary *controlstatus.StatusSummary) {
