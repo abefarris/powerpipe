@@ -296,25 +296,19 @@ const Benchmark = (props: InnerCheckProps) => {
 
     // TARGET, when the benchmark declares one: tags = { target_pass_rate = "95" }
     //
-    // The verdict is judged against the ROW-weighted rate, never the group
-    // weighting the rate card may be showing. Row weighting is what the Go side
-    // computes for the CLI summary and the exit code, and it does not move when
-    // the tree is regrouped - so the page cannot claim a target was met while
-    // `powerpipe benchmark run` exits non-zero, and the verdict does not change
-    // because somebody reordered the Filter & Group panel.
-    // See controlexecute.populateScores for the other half of this contract.
-    // Withheld until execution completes. Results stream in, so a partial run
-    // reads as a rate over only the controls that have reported: the first
-    // control to pass puts the benchmark at 100% and the card flashes MET
-    // before settling to MISSED. A verdict that is wrong for the first few
-    // seconds is worse than one that is briefly absent.
+    // The verdict comes from the server's summary, not from anything computed
+    // here. The client-side summaries are built from the FILTERED result tree,
+    // so judging the target against them lets a filter move the verdict - a
+    // view filtered to one passing domain read "met" on a benchmark that is
+    // missed. The server's populateScores runs over the full result set, is
+    // row-weighted, and is the same value the CLI prints and the exit code
+    // grades - so the page, however filtered or regrouped, agrees with
+    // `powerpipe benchmark run`. It also only exists once execution completes,
+    // which replaces the old streaming guard: a partial run simply has no
+    // verdict yet, rather than a briefly wrong one.
     const target = parseTargetPassRate(props.definition.tags?.target_pass_rate);
     const targetMet =
-      target !== undefined &&
-      evaluatedRows > 0 &&
-      props.grouping.status === "complete"
-        ? (100 * passedRows) / evaluatedRows >= target
-        : undefined;
+      target !== undefined ? props.definition.summary?.target_met : undefined;
 
     // The whole score display is opt-in via the tag. Declaring a target is the
     // benchmark saying "this number is graded" - that earns the 2x2 donut,
@@ -350,6 +344,7 @@ const Benchmark = (props: InnerCheckProps) => {
     props.groupingConfig,
     props.definition.name,
     props.definition.tags,
+    props.definition.summary,
   ]);
 
   if (!props.grouping) {

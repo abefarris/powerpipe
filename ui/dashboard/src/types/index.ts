@@ -424,6 +424,17 @@ export type PanelDefinition = {
   // control panels - see DashboardTreeRunImpl.Tags - but previously undeclared
   // here, so nothing could read them.
   tags?: { [key: string]: string };
+  // benchmark panels only: the server-computed execution summary
+  // (controlexecute.GroupSummary). Carries the scores derived by
+  // populateScores, which are computed over the FULL result set - the
+  // authoritative source for the target verdict, immune to client-side
+  // filtering and grouping.
+  summary?: {
+    status?: { alarm: number; ok: number; info: number; skip: number; error: number };
+    pass_rate?: number;
+    target_pass_rate?: number;
+    target_met?: boolean;
+  };
   title?: string;
   width?: Width;
 };
