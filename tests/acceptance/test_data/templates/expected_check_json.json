@@ -10,7 +10,8 @@
       "info": 3,
       "skip": 1,
       "error": 2
-    }
+    },
+    "pass_rate": 65
   },
   "groups": [],
   "controls": [

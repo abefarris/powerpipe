@@ -10,7 +10,8 @@
       "info": 0,
       "skip": 0,
       "error": 0
-    }
+    },
+    "pass_rate": 100
   },
   "groups": [
     {
@@ -25,7 +26,8 @@
           "info": 0,
           "skip": 0,
           "error": 0
-        }
+        },
+        "pass_rate": 100
       },
       "groups": [
         {
@@ -40,7 +42,8 @@
               "info": 0,
               "skip": 0,
               "error": 0
-            }
+            },
+            "pass_rate": 100
           },
           "groups": [],
           "controls": [
@@ -87,7 +90,8 @@
               "info": 0,
               "skip": 0,
               "error": 0
-            }
+            },
+            "pass_rate": 100
           },
           "groups": [],
           "controls": [
@@ -134,7 +138,8 @@
               "info": 0,
               "skip": 0,
               "error": 0
-            }
+            },
+            "pass_rate": 100
           },
           "groups": [],
           "controls": [
