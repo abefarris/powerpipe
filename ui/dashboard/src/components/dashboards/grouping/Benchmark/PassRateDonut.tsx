@@ -45,6 +45,20 @@ const PassRateDonut = ({
 }: PassRateDonutProps) => {
   const arc = rate === undefined ? 0 : (CIRCUMFERENCE * rate) / 100;
 
+  // Says how far short, rather than restating the two numbers the reader can
+  // already see. Percentage points, not percent: 85.7 against 95 is 9.3 points
+  // below, and calling that "9.8% below" would be a different, wronger number.
+  const targetTooltip =
+    target === undefined
+      ? ""
+      : rate === undefined
+        ? `Target ${target.toFixed(1)}% - nothing evaluated`
+        : targetMet === undefined
+          ? `Target ${target.toFixed(1)}% - still running`
+          : targetMet
+            ? `Target ${target.toFixed(1)}% met, ${(rate - target).toFixed(1)} points clear`
+            : `Target ${target.toFixed(1)}% missed by ${(target - rate).toFixed(1)} points`;
+
   // The target notch is placed by rotating a radial tick to the target's angle.
   // -90 puts 0% at twelve o'clock, matching where the arc starts.
   const targetAngle = target === undefined ? 0 : (360 * target) / 100 - 90;
@@ -99,19 +113,35 @@ const PassRateDonut = ({
             strokeDasharray={`${arc} ${CIRCUMFERENCE - arc}`}
             strokeLinecap="butt"
             transform={`rotate(-90 ${CENTER} ${CENTER})`}
-          />
+          >
+            <title>{`${label}: ${rate.toFixed(1)}%`}</title>
+          </circle>
         )}
         {target !== undefined && (
-          <line
-            className="text-foreground"
-            x1={CENTER + RADIUS - STROKE / 2 - 2}
-            y1={CENTER}
-            x2={CENTER + RADIUS + STROKE / 2 + 2}
-            y2={CENTER}
-            stroke="currentColor"
-            strokeWidth={2}
-            transform={`rotate(${targetAngle} ${CENTER} ${CENTER})`}
-          />
+          <g transform={`rotate(${targetAngle} ${CENTER} ${CENTER})`}>
+            {/* A 2px tick is close to unhoverable, so a transparent stroke
+                sits over it purely to widen the hit area for the tooltip. */}
+            <line
+              x1={CENTER + RADIUS - STROKE}
+              y1={CENTER}
+              x2={CENTER + RADIUS + STROKE}
+              y2={CENTER}
+              stroke="transparent"
+              strokeWidth={14}
+            >
+              <title>{targetTooltip}</title>
+            </line>
+            <line
+              className="text-foreground"
+              x1={CENTER + RADIUS - STROKE / 2 - 2}
+              y1={CENTER}
+              x2={CENTER + RADIUS + STROKE / 2 + 2}
+              y2={CENTER}
+              stroke="currentColor"
+              strokeWidth={2}
+              pointerEvents="none"
+            />
+          </g>
         )}
         {/* The rate sits inside the ring rather than beside it - the point of a
             square panel is that the number and the proportion occupy the same
@@ -134,20 +164,18 @@ const PassRateDonut = ({
         {label}
       </p>
       {target !== undefined && (
+        // Deliberately quiet. The ring already carries the state in colour and
+        // the notch shows the shortfall, so a second alarm-coloured shout is
+        // noise - this line is the caption that names the number, not another
+        // status indicator. The verdict stays spelled out so it does not
+        // depend on colour, but in sentence case at caption weight.
         <p
-          className={classNames(
-            "text-xs text-center w-full truncate",
-            targetMet === undefined
-              ? "text-foreground-lighter"
-              : targetMet
-                ? "text-ok"
-                : "text-alert",
-          )}
-          title={`Target ${target.toFixed(1)}%`}
+          className="text-xs text-center w-full truncate text-foreground-lighter"
+          title={targetTooltip}
         >
           {targetMet === undefined
             ? `Target ${target.toFixed(1)}%`
-            : `Target ${target.toFixed(1)}% ${targetMet ? "MET" : "MISSED"}`}
+            : `Target ${target.toFixed(1)}% ${targetMet ? "met" : "missed"}`}
         </p>
       )}
     </div>
